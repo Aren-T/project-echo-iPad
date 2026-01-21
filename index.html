@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Project Echo</title>
+    
+    <!-- 🍎 iPad/iOS Web App Meta Tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Echo Detective">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 fill=%22%231e293b%22 rx=%2220%22/><text y=%22.9em%22 font-size=%2290%22 x=%2250%22 text-anchor=%22middle%22 fill=%22white%22>E</text></svg>">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <style>
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        body { 
+            background-color: #f8fafc; 
+            /* Prevent bounce effect on iOS */
+            overscroll-behavior-y: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .word-segment { transition: all 0.2s ease; }
+        .word-segment:active { transform: scale(0.95); }
+        
+        .tooltip-trigger:hover .tooltip-content,
+        .tooltip-trigger:active .tooltip-content {
+            opacity: 1;
+            transform: translate(-50%, -10px);
+            pointer-events: auto;
+        }
+        
+        /* Better toggle switch */
+        .toggle-checkbox:checked { right: 0; border-color: #3b82f6; }
+        .toggle-checkbox:checked + .toggle-label { background-color: #3b82f6; }
+        
+        /* iOS Textarea optimization */
+        textarea {
+            font-size: 16px !important; /* Prevent zoom on focus */
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useMemo } = React;
+
+        // --- 🕵️‍♂️ ICON PACK (Optimized) ---
+        const Icons = {
+            Play: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>,
+            Pause: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>,
+            FastForward: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 19 22 12 13 5 13 19"/><polygon points="2 19 11 12 2 5 2 19"/></svg>,
+            RotateCcw: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>,
+            CheckCircle: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>,
+            XCircle: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>,
+            Volume2: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>,
+            ArrowRight: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>,
+            FileText: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>,
+            ClipboardList: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></svg>,
+            AlertCircle: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
+            Archive: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>,
+            TrendingUp: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>,
+            Brain: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z"/></svg>,
+            Globe: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>,
+            AlertTriangle: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
+            Trash2: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>,
+            ChevronRight: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>,
+            ChevronLeft: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>,
+            Tag: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94 .94-2.48 0-3.42L12 2Z"/><path d="M7 7h.01"/></svg>,
+            Mic: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>,
+            BookOpen: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>,
+            Download: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>,
+            Upload: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>,
+            Eye: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>,
+            EyeOff: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" y1="2" x2="22" y2="22"/></svg>,
+            RefreshCw: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>
+        };
+
+        // --- 🕵️‍♂️ UTILS ---
+        
+        const splitTextToSentences = (text) => {
+          if (!text) return [];
+          const result = text.match(/[^\.!\?\n]+[\.!\?\n]+|[^.!?\n]+$/g);
+          return result ? result.map(s => s.trim()).filter(s => s.length > 0) : [];
+        };
+
+        const normalizeWord = (word) => {
+          return word.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").toLowerCase();
+        };
+
+        const dialectPairs = {
+          "color": "colour", "flavor": "flavour", "honor": "honour", "labor": "labour", "neighbor": "neighbour",
+          "center": "centre", "theater": "theatre", "meter": "metre", "liter": "litre",
+          "analyze": "analyse", "paralyze": "paralyse", "organize": "organise", "realize": "realise",
+          "defense": "defence", "license": "licence", "offense": "offence",
+          "traveled": "travelled", "cancelled": "canceled", "program": "programme", "catalog": "catalogue", "dialog": "dialogue",
+          "grey": "gray"
+        };
+
+        const checkGrammar = (w1, w2) => {
+            const n1 = normalizeWord(w1);
+            const n2 = normalizeWord(w2);
+            if (n1 === n2) return false;
+            if (n1 + 's' === n2 || n2 + 's' === n1) return 'plural';
+            if (n1 + 'es' === n2 || n2 + 'es' === n1) return 'plural';
+            if (n1 + 'ed' === n2 || n2 + 'ed' === n1) return 'tense';
+            if (n1 + 'd' === n2 || n2 + 'd' === n1) return 'tense';
+            if (n1 + 'ing' === n2 || n2 + 'ing' === n1) return 'tense';
+            return false;
+        }
+
+        const getMatchType = (w1, w2) => {
+          const norm1 = normalizeWord(w1);
+          const norm2 = normalizeWord(w2);
+          if (norm1 === norm2) {
+             if (w1.toLowerCase() !== w2.toLowerCase()) return { type: 'hyphen', reason: 'Punctuation/Hyphen Check' };
+             return { type: 'match' };
+          }
+          if (dialectPairs[norm1] === norm2) return { type: 'dialect', reason: `US: ${norm1} / UK: ${norm2}` };
+          if (dialectPairs[norm2] === norm1) return { type: 'dialect', reason: `US: ${norm2} / UK: ${norm1}` };
+          const grammarIssue = checkGrammar(w1, w2);
+          if (grammarIssue === 'plural') return { type: 'grammar', reason: 'Check Singular/Plural' };
+          if (grammarIssue === 'tense') return { type: 'grammar', reason: 'Check Verb Tense' };
+          return { type: 'none' };
+        };
+
+        const calculateDiff = (originalRaw, userRaw) => {
+          const originalWords = originalRaw.split(/\s+/);
+          const userWords = userRaw.trim() === '' ? [] : userRaw.trim().split(/\s+/);
+          const m = originalWords.length;
+          const n = userWords.length;
+          const dp = Array(m + 1).fill(0).map(() => Array(n + 1).fill(0));
+
+          for (let i = 1; i <= m; i++) {
+            for (let j = 1; j <= n; j++) {
+              const match = getMatchType(originalWords[i - 1], userWords[j - 1]);
+              if (match.type !== 'none') {
+                dp[i][j] = dp[i - 1][j - 1] + 1;
+              } else {
+                dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+              }
+            }
+          }
+
+          let i = m, j = n;
+          const diff = [];
+          while (i > 0 || j > 0) {
+            const match = (i > 0 && j > 0) ? getMatchType(originalWords[i - 1], userWords[j - 1]) : { type: 'none' };
+            if (match.type !== 'none') {
+              diff.unshift({ type: match.type, reason: match.reason, value: originalWords[i - 1], userValue: userWords[j - 1] });
+              i--; j--;
+            } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+              diff.unshift({ type: 'extra', value: userWords[j - 1] });
+              j--;
+            } else {
+              diff.unshift({ type: 'missing', value: originalWords[i - 1] });
+              i--;
+            }
+          }
+          return diff;
+        };
+
+        const analyzeErrorPatterns = (resultsList) => {
+          const errorPairs = [];
+          const simpleMisses = [];
+          resultsList.forEach(res => {
+              const diff = res.diff;
+              for (let i = 0; i < diff.length; i++) {
+                const curr = diff[i];
+                const next = diff[i+1];
+                if (curr.type === 'missing') {
+                    if (next && next.type === 'extra') {
+                        errorPairs.push({ target: normalizeWord(curr.value), input: normalizeWord(next.value) });
+                        i++; 
+                    } else {
+                        simpleMisses.push(normalizeWord(curr.value));
+                    }
+                }
+              }
+          });
+          const patterns = {
+            "cial_tial": { count: 0, label: "cial/tial Mix-up", desc: "Confusion between -cial/-tial" },
+            "ant_ent": { count: 0, label: "ant/ent Mix-up", desc: "Confusion between -ant/-ent" },
+            "able_ible": { count: 0, label: "able/ible Mix-up", desc: "Confusion between -able/-ible" },
+            "ie_ei": { count: 0, label: "ie/ei Mix-up", desc: "Confusion between ie/ei" },
+            "double_letter": { count: 0, label: "Double Letter", desc: "Missing double letters" },
+            "se_ze": { count: 0, label: "se/ze Mix-up", desc: "Confusion between -se/-ze" },
+          };
+          errorPairs.forEach(({ target, input }) => {
+            if ((target.endsWith('cial') && input.endsWith('tial')) || (target.endsWith('tial') && input.endsWith('cial'))) patterns.cial_tial.count++;
+            if ((target.endsWith('ant') && input.endsWith('ent')) || (target.endsWith('ent') && input.endsWith('ant'))) patterns.ant_ent.count++;
+            if ((target.endsWith('able') && input.endsWith('ible')) || (target.endsWith('ible') && input.endsWith('able'))) patterns.able_ible.count++;
+            if ((target.endsWith('se') && input.endsWith('ze')) || (target.endsWith('ze') && input.endsWith('se'))) patterns.se_ze.count++;
+            if ((target.includes('ie') && input.includes('ei')) || (target.includes('ei') && input.includes('ie'))) patterns.ie_ei.count++;
+            const hasDouble = /(.)\1/.test(target);
+            if (hasDouble && input.length < target.length && target.includes(input.replace(/(.)\1/g, "$1"))) patterns.double_letter.count++;
+          });
+          const activePatterns = Object.values(patterns).filter(p => p.count > 0).sort((a,b) => b.count - a.count);
+          const frequency = {};
+          [...errorPairs.map(e => e.target), ...simpleMisses].forEach(w => frequency[w] = (frequency[w] || 0) + 1);
+          const mostWanted = Object.entries(frequency).sort((a, b) => b[1] - a[1]).slice(0, 3).map(i => i[0]);
+          return { activePatterns, mostWanted, totalErrors: errorPairs.length + simpleMisses.length };
+        };
+
+        const generateGlobalInsights = (history) => {
+          if (!history || history.length === 0) return null;
+          return analyzeErrorPatterns(history.flatMap(h => h.results));
+        };
+
+        const generateCaseTags = (sessionResults) => {
+            return analyzeErrorPatterns(sessionResults).activePatterns.map(p => p.label);
+        };
+
+        const STORAGE_KEY = 'echo_detective_archives_v1';
+        const loadArchives = () => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; } catch { return []; } };
+        const saveArchive = (newRecord) => { try { const updated = [newRecord, ...loadArchives()]; localStorage.setItem(STORAGE_KEY, JSON.stringify(updated)); return updated; } catch { return []; } };
+        const clearArchives = () => { localStorage.removeItem(STORAGE_KEY); return []; };
+        const exportArchives = () => {
+            const data = localStorage.getItem(STORAGE_KEY);
+            if (!data) return alert("No evidence to export!");
+            const blob = new Blob([data], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `echo_archive_${new Date().toISOString().slice(0,10)}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        };
+
+        // --- COMPONENTS ---
+        const SetupStage = ({ rawText, setRawText, onStart }) => (
+            <div className="flex flex-col gap-6 max-w-2xl mx-auto animate-in fade-in zoom-in duration-300">
+                <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-200">
+                <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2 mb-4">
+                    <Icons.FileText className="w-6 h-6 text-blue-600" />
+                    Open New Case File
+                </h2>
+                <textarea
+                    className="w-full h-48 p-4 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-none font-mono text-base"
+                    value={rawText}
+                    onChange={(e) => setRawText(e.target.value)}
+                    placeholder="Paste investigation material here..."
+                />
+                <div className="mt-4 flex justify-end">
+                    <button
+                    onClick={onStart}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold flex items-center gap-2 transition-all shadow-md active:scale-95"
+                    >
+                    Start Investigation <Icons.ArrowRight className="w-5 h-5" />
+                    </button>
+                </div>
+                </div>
+            </div>
+        );
+
+        const PracticeStage = ({ 
+            idx, total, isPlaying, playAudio, stopAudio,
+            playbackRate, setPlaybackRate, 
+            userInput, setUserInput, onSubmit, 
+            sentenceText, 
+            availableVoices, selectedVoice, setSelectedVoice,
+            activeWordIndex,
+            reloadVoices 
+        }) => {
+            const [showTracker, setShowTracker] = useState(false); 
+            const words = useMemo(() => sentenceText.split(/\s+/), [sentenceText]);
+            
+            const handleWordClick = (wordIndex) => {
+                const textToPlay = words.slice(wordIndex).join(' ');
+                playAudio(textToPlay, wordIndex);
+            };
+
+            const toggleSpeed = () => {
+                if (playbackRate === 1) setPlaybackRate(0.7);
+                else if (playbackRate === 0.7) setPlaybackRate(0.5);
+                else setPlaybackRate(1);
+            };
+
+            return (
+                <div className="flex flex-col gap-6 max-w-2xl mx-auto animate-in slide-in-from-right duration-300">
+                    <div className="flex justify-between items-center text-slate-500 text-sm font-medium">
+                        <span>Evidence Segment {idx + 1} / {total}</span>
+                        <span>Progress: {Math.round(((idx) / total) * 100)}%</span>
+                    </div>
+                    <div className="w-full bg-slate-200 rounded-full h-2.5">
+                        <div className="bg-blue-600 h-2.5 rounded-full transition-all duration-500" style={{ width: `${((idx + 1) / total) * 100}%` }}></div>
+                    </div>
+
+                    <div className="bg-white p-6 md:p-8 rounded-xl shadow-lg border border-slate-200 text-center">
+                        <div className="mb-8">
+                            <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-4">
+                                {/* Voice Selector */}
+                                <div className="relative inline-block w-full md:w-auto">
+                                    <div className="flex items-center gap-2">
+                                        {availableVoices.length === 0 ? (
+                                            <button onClick={reloadVoices} className="text-blue-500 text-xs flex items-center gap-1 bg-blue-50 px-2 py-1 rounded">
+                                                <Icons.RefreshCw className="w-3 h-3"/> Load Voices
+                                            </button>
+                                        ) : (
+                                            <select 
+                                                value={selectedVoice ? selectedVoice.name : ''}
+                                                onChange={(e) => {
+                                                    const voice = availableVoices.find(v => v.name === e.target.value);
+                                                    setSelectedVoice(voice);
+                                                }}
+                                                className="appearance-none w-full md:w-auto bg-slate-50 border border-slate-200 text-slate-600 text-xs py-2 px-3 pr-8 rounded-lg focus:outline-none focus:border-blue-400 cursor-pointer truncate"
+                                            >
+                                                {availableVoices.map(v => (
+                                                    <option key={v.name} value={v.name}>{v.name.slice(0, 25)}... ({v.lang})</option>
+                                                ))}
+                                            </select>
+                                        )}
+                                        {availableVoices.length > 0 && (
+                                            <div className="pointer-events-none absolute right-2 text-slate-500">
+                                                <svg className="fill-current h-3 w-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Tracker Toggle */}
+                                <div className="flex items-center self-end md:self-auto">
+                                    <label htmlFor="tracker-toggle" className="flex items-center cursor-pointer">
+                                        <div className="relative">
+                                            <input type="checkbox" id="tracker-toggle" className="sr-only toggle-checkbox" checked={showTracker} onChange={() => setShowTracker(!showTracker)} />
+                                            <div className="toggle-label block bg-slate-200 w-8 h-5 rounded-full transition-colors"></div>
+                                            <div className={`dot absolute left-1 top-1 bg-white w-3 h-3 rounded-full transition-transform ${showTracker ? 'transform translate-x-3' : ''}`}></div>
+                                        </div>
+                                        <div className="ml-2 text-slate-500 text-xs font-medium flex items-center gap-1">
+                                            {showTracker ? <Icons.Eye className="w-3 h-3"/> : <Icons.EyeOff className="w-3 h-3"/>} Tracker
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div className="w-20 h-20 md:w-24 md:h-24 bg-slate-100 rounded-full mx-auto flex items-center justify-center mb-4 border-4 border-slate-50 shadow-inner">
+                                {isPlaying ? (
+                                    <Icons.Volume2 className="w-8 h-8 md:w-10 md:h-10 text-blue-500 animate-pulse" />
+                                ) : (
+                                    <div className="text-slate-300 text-2xl md:text-3xl">🔈</div>
+                                )}
+                            </div>
+                            
+                            <div className="flex justify-center gap-4 mb-6">
+                                <button 
+                                    onClick={() => playAudio()} 
+                                    disabled={isPlaying}
+                                    className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 md:px-8 py-3 rounded-full font-bold shadow-md transition-transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {isPlaying ? <Icons.Pause className="w-5 h-5" /> : <Icons.Play className="w-5 h-5" />}
+                                    <span className="hidden md:inline">{isPlaying ? 'Playing...' : 'Play Evidence'}</span>
+                                    <span className="md:hidden">Play</span>
+                                </button>
+                                <button 
+                                    onClick={toggleSpeed}
+                                    className="flex items-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-600 px-4 py-2 rounded-full text-sm font-medium transition-colors active:scale-95"
+                                >
+                                    <Icons.FastForward className="w-4 h-4" />
+                                    {playbackRate}x
+                                </button>
+                            </div>
+
+                            <div className="flex flex-wrap gap-1 justify-center mb-4 px-1 md:px-4">
+                                {words.map((word, i) => (
+                                    <button 
+                                        key={i}
+                                        onClick={() => handleWordClick(i)}
+                                        className={`word-segment h-2 w-full max-w-[20px] md:max-w-[30px] rounded-sm cursor-pointer transition-colors ${
+                                            showTracker && i === activeWordIndex ? 'bg-blue-500 shadow-md ring-2 ring-blue-200' : 'bg-slate-200 hover:bg-blue-300'
+                                        }`}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+
+                        <textarea
+                            className="w-full h-32 p-4 text-base border-2 border-slate-200 rounded-lg focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none resize-none transition-all"
+                            value={userInput}
+                            onChange={(e) => setUserInput(e.target.value)}
+                            placeholder="Type what you hear..."
+                            autoFocus
+                        />
+                        <div className="mt-6 flex justify-end">
+                            <button
+                                onClick={onSubmit}
+                                disabled={!userInput.trim()}
+                                className="bg-green-600 hover:bg-green-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white px-6 py-3 rounded-lg font-semibold flex items-center gap-2 transition-all shadow-md active:scale-95"
+                            >
+                                <Icons.CheckCircle className="w-5 h-5" />
+                                Submit
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const DiffViewer = ({ diff }) => (
+            <div className="p-4 bg-slate-50 rounded-lg leading-loose text-lg font-serif">
+                {diff.map((item, idx) => {
+                    let content = null;
+                    if (item.type === 'match') {
+                        content = <span className="text-green-700">{item.value}</span>;
+                    } else if (item.type === 'missing') {
+                        content = <span className="text-red-600 bg-red-50 border-b-2 border-red-200 font-bold px-1">{item.value}</span>;
+                    } else if (item.type === 'extra') {
+                        content = <span className="text-slate-400 line-through decoration-red-400 decoration-2">{item.value}</span>;
+                    } else {
+                        let colorClass = "border-yellow-300 bg-yellow-50 text-slate-800";
+                        if (item.type === 'hyphen') colorClass = "border-orange-300 bg-orange-50 text-slate-800";
+                        if (item.type === 'grammar') colorClass = "border-blue-300 bg-blue-50 text-slate-800";
+                        
+                        content = (
+                            <span className={`group relative cursor-help border-b-2 px-1 tooltip-trigger ${colorClass}`}>
+                                {item.value}
+                                <span className="tooltip-content absolute -top-16 left-1/2 -translate-x-1/2 w-max bg-slate-800 text-white text-xs px-3 py-2 rounded opacity-0 transition-all z-10 pointer-events-none shadow-xl">
+                                    <div className="font-bold border-b border-slate-600 pb-1 mb-1 capitalize">{item.reason || item.type}</div>
+                                    <div className="grid grid-cols-2 gap-x-2 text-[10px]">
+                                        <span className="text-slate-400">Target:</span> <span>{item.value}</span>
+                                        <span className="text-slate-400">Yours:</span> <span>{item.userValue}</span>
+                                    </div>
+                                </span>
+                            </span>
+                        );
+                    }
+                    return <span key={idx} className="inline-block mr-1.5 mb-1">{content}</span>;
+                })}
+            </div>
+        );
+
+        const ReviewStage = ({ result, playAudio, onRetry, onNext, isLast }) => {
+            if (!result) return null;
+            return (
+                <div className="flex flex-col gap-6 max-w-2xl mx-auto animate-in fade-in duration-500">
+                <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-200">
+                    <div className="flex justify-between items-start mb-4 border-b pb-4 border-slate-100">
+                        <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                            <Icons.ClipboardList className="w-6 h-6 text-purple-600" />
+                            Forensic Analysis
+                        </h2>
+                        <div className={`text-xl font-black ${result.score === 100 ? 'text-green-600' : result.score > 60 ? 'text-yellow-600' : 'text-red-600'}`}>
+                            {result.score}%
+                        </div>
+                    </div>
+
+                    <div className="space-y-4 mb-6">
+                        <DiffViewer diff={result.diff} />
+                        
+                        <div className="flex flex-wrap gap-2 text-xs">
+                             {result.diff.some(d => d.type === 'dialect') && (
+                                <div className="text-yellow-700 bg-yellow-50 px-2 py-1 rounded flex items-center gap-1">
+                                    <Icons.Globe className="w-3 h-3" /> Dialect
+                                </div>
+                            )}
+                            {result.diff.some(d => d.type === 'grammar') && (
+                                <div className="text-blue-700 bg-blue-50 px-2 py-1 rounded flex items-center gap-1">
+                                    <Icons.BookOpen className="w-3 h-3" /> Grammar Check
+                                </div>
+                            )}
+                            {result.diff.some(d => d.type === 'hyphen') && (
+                                <div className="text-orange-700 bg-orange-50 px-2 py-1 rounded flex items-center gap-1">
+                                    <Icons.AlertCircle className="w-3 h-3" /> Punctuation
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {result.wrongWords.length > 0 && (
+                        <div className="mb-6 p-4 bg-red-50 rounded-lg border border-red-100">
+                            <h3 className="text-sm font-bold text-red-800 mb-3 flex items-center gap-2">
+                                <Icons.XCircle className="w-4 h-4" /> 
+                                Missed Words
+                            </h3>
+                            <div className="flex flex-wrap gap-2">
+                                {result.wrongWords.map((word, idx) => (
+                                    <button key={idx} onClick={() => playAudio(word)} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-red-200 text-red-700 rounded-full hover:bg-red-100 transition-colors shadow-sm active:scale-95">
+                                        <Icons.Volume2 className="w-3 h-3" />
+                                        <span className="font-medium">{word}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="flex justify-between items-center mt-8 pt-4 border-t border-slate-100">
+                        <button onClick={onRetry} className="text-slate-500 hover:text-slate-700 flex items-center gap-2 font-medium px-4 py-2 hover:bg-slate-100 rounded-lg transition-colors active:scale-95">
+                            <Icons.RotateCcw className="w-4 h-4" /> Retry
+                        </button>
+                        <button onClick={onNext} className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg font-semibold flex items-center gap-2 shadow-md transition-all active:scale-95">
+                            {isLast ? 'Close' : 'Next'} <Icons.ArrowRight className="w-5 h-5" />
+                        </button>
+                    </div>
+                </div>
+                </div>
+            );
+        };
+
+        const SummaryStage = ({ results, onNewCase, onViewArchive }) => {
+            const totalScore = Math.round(results.reduce((acc, curr) => acc + curr.score, 0) / results.length);
+            return (
+                <div className="flex flex-col gap-6 max-w-2xl mx-auto text-center animate-in zoom-in duration-500">
+                    <div className="bg-white p-8 rounded-xl shadow-2xl border-t-8 border-purple-600">
+                        <h2 className="text-3xl font-bold text-slate-800 mb-2">Case Closed</h2>
+                        <p className="text-slate-500 mb-8">Data has been secured in local archives.</p>
+                        
+                        <div className="inline-flex items-center justify-center w-40 h-40 rounded-full bg-slate-50 border-8 border-purple-100 mb-8">
+                            <div className="flex flex-col">
+                                <span className="text-4xl font-black text-purple-600">{totalScore}</span>
+                                <span className="text-xs uppercase font-bold text-slate-400 tracking-wider">Total Score</span>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4 text-left mb-8">
+                            {results.map((res, idx) => (
+                                <div key={idx} className="p-3 bg-slate-50 rounded border border-slate-100 flex justify-between items-center">
+                                    <span className="text-sm font-medium text-slate-600">Seg #{idx + 1}</span>
+                                    <span className={`font-bold ${res.score >= 80 ? 'text-green-600' : 'text-red-500'}`}>{res.score}%</span>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="flex gap-4">
+                            <button onClick={onViewArchive} className="flex-1 bg-slate-100 text-slate-700 py-4 rounded-lg font-bold hover:bg-slate-200 transition-colors active:scale-95">
+                                View Archive
+                            </button>
+                            <button onClick={onNewCase} className="flex-1 bg-slate-900 text-white py-4 rounded-lg font-bold hover:bg-slate-800 transition-colors shadow-lg active:scale-95">
+                                New Case
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const CaseDetailView = ({ record, onBack, onRetryCase }) => {
+            return (
+                <div className="animate-in slide-in-from-right duration-300">
+                    <div className="flex justify-between items-center mb-4">
+                        <button onClick={onBack} className="text-slate-500 hover:text-slate-700 flex items-center gap-1 font-medium active:scale-95">
+                            <Icons.ChevronLeft className="w-4 h-4" /> Back
+                        </button>
+                        <button 
+                            onClick={() => onRetryCase(record)} 
+                            className="bg-blue-600 hover:bg-blue-700 text-white text-sm px-4 py-2 rounded-lg font-semibold flex items-center gap-2 shadow transition-all active:scale-95"
+                        >
+                            <Icons.RotateCcw className="w-4 h-4" /> Reopen
+                        </button>
+                    </div>
+                    
+                    <div className="bg-white rounded-xl shadow border border-slate-200 p-6 mb-6">
+                        <div className="flex justify-between items-start mb-6">
+                            <div>
+                                <h2 className="text-2xl font-bold text-slate-800">{record.caseId}</h2>
+                                <p className="text-slate-400 text-sm mt-1">{new Date(record.timestamp).toLocaleString()}</p>
+                            </div>
+                            <div className="text-right">
+                                <div className={`text-3xl font-black ${record.totalScore >= 80 ? 'text-green-600' : 'text-slate-600'}`}>
+                                    {record.totalScore}%
+                                </div>
+                                <div className="text-xs uppercase font-bold text-slate-400">Score</div>
+                            </div>
+                        </div>
+                        
+                        <div className="space-y-8">
+                            {record.results.map((res, idx) => (
+                                <div key={idx} className="border-t border-slate-100 pt-6 first:border-0 first:pt-0">
+                                    <div className="flex justify-between items-center mb-3">
+                                        <span className="font-bold text-slate-700 text-sm">Segment #{idx + 1}</span>
+                                        <span className={`text-sm font-bold ${res.score >= 80 ? 'text-green-600' : 'text-red-500'}`}>{res.score}%</span>
+                                    </div>
+                                    <DiffViewer diff={res.diff} />
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const ArchiveStage = ({ history, globalInsights, onClear, onRetryCase, onImport }) => {
+            const [selectedCase, setSelectedCase] = useState(null);
+            const fileInputRef = useRef(null);
+
+            const handleFileChange = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        const importedData = JSON.parse(event.target.result);
+                        if (Array.isArray(importedData)) {
+                            onImport(importedData);
+                        } else {
+                            alert("Invalid data format.");
+                        }
+                    } catch (err) {
+                        alert("Error parsing file.");
+                    }
+                };
+                reader.readAsText(file);
+            };
+
+            if (selectedCase) {
+                return <CaseDetailView record={selectedCase} onBack={() => setSelectedCase(null)} onRetryCase={onRetryCase} />;
+            }
+
+            return (
+                <div className="flex flex-col gap-6 max-w-4xl mx-auto animate-in fade-in duration-300">
+                    <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+                        <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+                            <Icons.Archive className="w-6 h-6 text-slate-600" /> Cold Case Unit
+                        </h2>
+                        <div className="flex gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0">
+                            <button onClick={exportArchives} className="bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 px-3 py-1.5 rounded-lg text-sm flex items-center gap-2 shadow-sm font-medium whitespace-nowrap active:scale-95">
+                                <Icons.Download className="w-4 h-4" /> Export
+                            </button>
+                            <button onClick={() => fileInputRef.current.click()} className="bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 px-3 py-1.5 rounded-lg text-sm flex items-center gap-2 shadow-sm font-medium whitespace-nowrap active:scale-95">
+                                <Icons.Upload className="w-4 h-4" /> Import
+                            </button>
+                            <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".json" />
+                            <button onClick={onClear} className="text-red-500 hover:bg-red-50 px-3 py-1.5 rounded-lg text-sm flex items-center gap-1 font-medium whitespace-nowrap active:scale-95">
+                                <Icons.Trash2 className="w-4 h-4" /> Clear
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="bg-white p-6 rounded-xl shadow border border-slate-200">
+                            <div className="flex items-center gap-2 mb-2 text-purple-600 font-bold text-sm uppercase tracking-wider">
+                                <Icons.TrendingUp className="w-4 h-4" /> Avg Performance
+                            </div>
+                            <div className="text-4xl font-black text-slate-800">
+                                {history.length > 0 ? Math.round(history.reduce((a,b)=>a+b.totalScore,0)/history.length) : 0}%
+                            </div>
+                            <p className="text-slate-400 text-xs mt-1">Across {history.length} cases</p>
+                        </div>
+
+                        <div className="bg-white p-6 rounded-xl shadow border border-slate-200 md:col-span-2">
+                            <div className="flex items-center gap-2 mb-2 text-blue-600 font-bold text-sm uppercase tracking-wider">
+                                <Icons.Brain className="w-4 h-4" /> Profiler's Global Report
+                            </div>
+                            {globalInsights && globalInsights.activePatterns.length > 0 ? (
+                                <div className="flex flex-col gap-3">
+                                    <div className="flex flex-wrap gap-2">
+                                        {globalInsights.activePatterns.map((p, idx) => (
+                                            <div key={idx} className="bg-red-50 text-red-700 px-3 py-1.5 rounded-lg font-medium border border-red-100 flex items-center gap-2 text-sm shadow-sm">
+                                                <Icons.AlertTriangle className="w-3 h-3" /> 
+                                                <span>{p.desc}</span>
+                                                <span className="bg-white text-red-800 text-xs px-1.5 py-0.5 rounded-full font-bold ml-1">{p.count}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            ) : (
+                                <p className="text-slate-400 italic text-sm mt-2">No recurring error patterns detected yet. Good job!</p>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="bg-white rounded-xl shadow border border-slate-200 overflow-hidden">
+                        <div className="p-4 bg-slate-50 border-b border-slate-200 font-bold text-slate-600 text-sm">Case Log (Click to View)</div>
+                        {history.length === 0 ? (
+                            <div className="p-8 text-center text-slate-400">No cases found in archive.</div>
+                        ) : (
+                            <div className="divide-y divide-slate-100 max-h-96 overflow-y-auto">
+                                {history.map((record) => {
+                                    const caseTags = generateCaseTags(record.results);
+                                    return (
+                                        <button 
+                                            key={record.timestamp} 
+                                            onClick={() => setSelectedCase(record)}
+                                            className="w-full p-4 hover:bg-blue-50 transition-all flex justify-between items-center group text-left active:bg-blue-100"
+                                        >
+                                            <div className="flex-1 min-w-0 pr-4">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className="font-bold text-slate-800 group-hover:text-blue-700 transition-colors">{record.caseId}</span>
+                                                    <span className="text-xs text-slate-400 font-normal">{new Date(record.timestamp).toLocaleDateString()}</span>
+                                                </div>
+                                                <div className="text-xs text-slate-500 truncate mb-2">{record.rawText}</div>
+                                                
+                                                {caseTags.length > 0 && (
+                                                    <div className="flex flex-wrap gap-1.5">
+                                                        {caseTags.slice(0, 2).map((tag, tIdx) => (
+                                                            <span key={tIdx} className="bg-slate-100 text-slate-600 text-[10px] px-2 py-0.5 rounded-full border border-slate-200 font-medium flex items-center gap-1">
+                                                                <Icons.Tag className="w-3 h-3" /> {tag}
+                                                            </span>
+                                                        ))}
+                                                        {caseTags.length > 2 && <span className="text-[10px] text-slate-400">+{caseTags.length - 2}</span>}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            
+                                            <div className="text-right pl-4 border-l border-slate-100">
+                                                <span className={`text-xl font-bold block ${record.totalScore >= 80 ? 'text-green-600' : 'text-slate-600'}`}>
+                                                    {record.totalScore}%
+                                                </span>
+                                                <Icons.ChevronRight className="w-5 h-5 text-slate-300 mx-auto mt-1 group-hover:text-blue-400 transition-colors" />
+                                            </div>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        const DictationApp = () => {
+            const [stage, setStage] = useState('setup');
+            const [rawText, setRawText] = useState("The special committee will analyze whether the well-known evidence is substantial.\nI believe the neighbor realized the color of the spatial arrangement was resistant to change.");
+            const [sentences, setSentences] = useState([]);
+            const [currentIdx, setCurrentIdx] = useState(0);
+            const [userInput, setUserInput] = useState('');
+            const [playbackRate, setPlaybackRate] = useState(1.0);
+            const [isPlaying, setIsPlaying] = useState(false);
+            const [sessionResults, setSessionResults] = useState([]);
+            const [history, setHistory] = useState([]);
+            
+            const [activeWordIndex, setActiveWordIndex] = useState(-1);
+            
+            // Voice State
+            const [availableVoices, setAvailableVoices] = useState([]);
+            const [selectedVoice, setSelectedVoice] = useState(null);
+
+            const synth = window.speechSynthesis;
+            const utteranceRef = useRef(null);
+
+            // Function to load voices safely on iOS
+            const loadVoices = () => {
+                const voices = synth.getVoices().filter(v => v.lang.startsWith('en'));
+                setAvailableVoices(voices);
+                if (voices.length > 0 && !selectedVoice) {
+                    setSelectedVoice(voices[0]);
+                }
+            };
+
+            useEffect(() => {
+                setHistory(loadArchives());
+                loadVoices();
+                if (synth.onvoiceschanged !== undefined) {
+                    synth.onvoiceschanged = loadVoices;
+                }
+            }, []);
+
+            const handleSaveToArchive = () => {
+                if (sessionResults.length === 0) return;
+                const totalScore = Math.round(sessionResults.reduce((acc, curr) => acc + curr.score, 0) / sessionResults.length);
+                const sessionData = {
+                    timestamp: Date.now(),
+                    rawText: rawText.substring(0, 50) + "...",
+                    fullText: rawText, 
+                    totalScore,
+                    results: sessionResults,
+                    caseId: `CASE-${Date.now().toString().slice(-6)}`
+                };
+                const updatedHistory = saveArchive(sessionData);
+                setHistory(updatedHistory);
+            };
+
+            const handleClearHistory = () => {
+                if(confirm("Are you sure?")) {
+                    setHistory(clearArchives());
+                }
+            };
+            
+            const handleImport = (data) => {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+                setHistory(data);
+                alert("Archives restored.");
+            };
+
+            const handleStartCase = () => {
+                const splitSentences = splitTextToSentences(rawText);
+                if (splitSentences.length === 0) {
+                    alert("No evidence text provided!");
+                    return;
+                }
+                setSentences(splitSentences);
+                setSessionResults([]);
+                setCurrentIdx(0);
+                setUserInput('');
+                setActiveWordIndex(-1);
+                setStage('practice');
+            };
+            
+            const handleRetryCase = (record) => {
+                const textToUse = record.fullText || record.rawText;
+                setRawText(textToUse);
+                const splitSentences = splitTextToSentences(textToUse);
+                setSentences(splitSentences);
+                setSessionResults([]);
+                setCurrentIdx(0);
+                setUserInput('');
+                setActiveWordIndex(-1);
+                setStage('practice');
+            };
+
+            const playAudio = (textToSpeak = null, startIndexOffset = 0) => {
+                synth.cancel();
+                setActiveWordIndex(-1);
+                
+                const text = textToSpeak || sentences[currentIdx];
+                const utterance = new SpeechSynthesisUtterance(text);
+                
+                if (selectedVoice) {
+                    utterance.voice = selectedVoice;
+                }
+                utterance.lang = 'en-US';
+                utterance.rate = playbackRate;
+                
+                utterance.onboundary = (event) => {
+                    if (event.name === 'word') {
+                        const textBefore = text.substring(0, event.charIndex);
+                        const wordCountBefore = textBefore.trim().split(/\s+/).length;
+                        const currentChunkIndex = (event.charIndex === 0) ? 0 : wordCountBefore;
+                        setActiveWordIndex(startIndexOffset + currentChunkIndex);
+                    }
+                };
+                
+                utterance.onstart = () => setIsPlaying(true);
+                utterance.onend = () => {
+                    setIsPlaying(false);
+                    setActiveWordIndex(-1);
+                };
+                
+                utteranceRef.current = utterance;
+                synth.speak(utterance);
+            };
+            
+            const stopAudio = () => {
+                synth.cancel();
+                setIsPlaying(false);
+                setActiveWordIndex(-1);
+            };
+
+            const handleSubmitEvidence = () => {
+                synth.cancel();
+                setIsPlaying(false);
+                setActiveWordIndex(-1);
+                const original = sentences[currentIdx];
+                const diff = calculateDiff(original, userInput);
+                
+                const matchCount = diff.filter(d => ['match', 'dialect', 'hyphen', 'grammar'].includes(d.type)).length;
+                const originalWordCount = original.split(/\s+/).length;
+                let score = Math.round((matchCount / originalWordCount) * 100);
+                const extraCount = diff.filter(d => d.type === 'extra').length;
+                if (extraCount > 0) score = Math.max(0, score - (extraCount * 5));
+
+                const wrongWords = diff.filter(d => d.type === 'missing').map(d => normalizeWord(d.value));
+
+                const currentResult = {
+                    sentenceIndex: currentIdx,
+                    original,
+                    userInput,
+                    diff,
+                    score,
+                    wrongWords
+                };
+
+                const newSessionResults = [...sessionResults];
+                newSessionResults[currentIdx] = currentResult;
+                setSessionResults(newSessionResults);
+                setStage('review');
+            };
+
+            const handleNextCase = () => {
+                if (currentIdx < sentences.length - 1) {
+                    setCurrentIdx(prev => prev + 1);
+                    setUserInput('');
+                    setStage('practice');
+                } else {
+                    handleSaveToArchive();
+                    setStage('summary');
+                }
+            };
+
+            const globalInsights = useMemo(() => generateGlobalInsights(history), [history]);
+
+            return (
+                <div className="min-h-screen font-sans text-slate-900 py-10 px-4">
+                    <header className="max-w-4xl mx-auto mb-8 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-slate-900 text-white rounded-lg flex items-center justify-center font-bold text-xl shadow-lg">E</div>
+                        <div>
+                            <h1 className="text-2xl font-black tracking-tight text-slate-900">Echo</h1>
+                            <p className="text-xs text-slate-500 font-medium uppercase tracking-widest">iPad Unit</p>
+                        </div>
+                        </div>
+                        <div className="flex gap-2">
+                        <button 
+                            onClick={() => setStage('setup')}
+                            className={`p-2 rounded-lg transition-colors active:scale-95 ${stage === 'setup' ? 'bg-blue-100 text-blue-700' : 'hover:bg-slate-100 text-slate-500'}`}
+                            title="New Case"
+                        >
+                            <Icons.FileText className="w-5 h-5" />
+                        </button>
+                        <button 
+                            onClick={() => setStage('archive')}
+                            className={`p-2 rounded-lg transition-colors active:scale-95 ${stage === 'archive' ? 'bg-blue-100 text-blue-700' : 'hover:bg-slate-100 text-slate-500'}`}
+                            title="Local Archives"
+                        >
+                            <Icons.Archive className="w-5 h-5" />
+                        </button>
+                        </div>
+                    </header>
+                    
+                    <main>
+                        {stage === 'setup' && (
+                        <SetupStage rawText={rawText} setRawText={setRawText} onStart={handleStartCase} />
+                        )}
+                        {stage === 'practice' && (
+                        <PracticeStage 
+                            idx={currentIdx} 
+                            total={sentences.length} 
+                            isPlaying={isPlaying} 
+                            playAudio={playAudio} 
+                            stopAudio={stopAudio}
+                            playbackRate={playbackRate} 
+                            setPlaybackRate={setPlaybackRate} 
+                            userInput={userInput} 
+                            setUserInput={setUserInput} 
+                            onSubmit={handleSubmitEvidence}
+                            sentenceText={sentences[currentIdx]}
+                            availableVoices={availableVoices}
+                            selectedVoice={selectedVoice}
+                            setSelectedVoice={setSelectedVoice}
+                            activeWordIndex={activeWordIndex}
+                            reloadVoices={loadVoices}
+                        />
+                        )}
+                        {stage === 'review' && (
+                        <ReviewStage 
+                            result={sessionResults[currentIdx]} 
+                            playAudio={playAudio} 
+                            onRetry={() => { setUserInput(''); setStage('practice'); }} 
+                            onNext={handleNextCase} 
+                            isLast={currentIdx === sentences.length - 1} 
+                        />
+                        )}
+                        {stage === 'summary' && (
+                        <SummaryStage 
+                            results={sessionResults} 
+                            onNewCase={() => setStage('setup')} 
+                            onViewArchive={() => setStage('archive')} 
+                        />
+                        )}
+                        {stage === 'archive' && (
+                        <ArchiveStage 
+                            history={history} 
+                            globalInsights={globalInsights} 
+                            onClear={handleClearHistory} 
+                            onRetryCase={handleRetryCase}
+                            onImport={handleImport}
+                        />
+                        )}
+                    </main>
+
+                    <footer className="max-w-4xl mx-auto mt-12 text-center text-slate-400 text-sm">
+                        <p>Detective Tools v4.5 • iPad Optimized</p>
+                    </footer>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<DictationApp />);
+    </script>
+</body>
+</html>
